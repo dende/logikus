@@ -1,6 +1,6 @@
 var Logikus = {
 
-	selected : null,
+	selectedRect : null,
 	selectedLine : null,
 	canvas : null,
 	patchbay : null,
@@ -13,12 +13,12 @@ var Logikus = {
 	lights: null,
 	workingOn: null,
 	done: null,
-	lightBulb: null,
+	lightBulbs: null,
 
 	setup : function () {
 		this.setupCanvas();
-		this.setupEventListeners();
 		this.setupWizardry();
+		this.setupEventListeners();
 		this.drawLamps();
 		this.drawUpperRow();
 		this.drawPatchbay();
@@ -26,29 +26,14 @@ var Logikus = {
 	},
 
 	setupCanvas : function() {
-		var that = this;
 		this.canvas = new fabric.Canvas('logikus');
 		this.canvas.selection = false;
-		this.canvas.on('mouse:down', function(options){that.mouseDownHandler(options)});
-		this.canvas.hoverCursor = 'pointer';
-
-	},
-
-	setupEventListeners : function () {
-		var check = function check(e) {
-			if (e.keyCode == 46){
-				//remove  button clicked
-				if (selectedLine != null){
-					Logikus.disconnect(selectedLine);
-				}
-			}
-		}
-
-		window.addEventListener('keydown',check,false);
-
 	},
 
 	setupWizardry : function () {
+		this.levers = [0,0,0,0,0,0,0,0,0,0,0];
+		this.lamps = [0,0,0,0,0,0,0,0,0,0];
+		this.lightBulbs = [];
 		this.wizardry = {Logikus: Logikus};
 		for (var i = 0; i < 11; i++){
 			this.wizardry[i] = {}
@@ -74,14 +59,23 @@ var Logikus = {
 						}
 					}
 				} else {
+					//this.isInput(c2) == true
 					if (this[c2.y][c2.x].connectIn(c2, c1)){
 						if (!this[c1.y][c1.x].connectOut(c1, c2)){
 							this.disconnect(c1,c2)
 							return false;
 						}
+					}	
+				} 
+			} else if (this.isInput(c1) && this.isInput(c2)){
+				if (this[c1.y][c1.x].shortCut(c1, c2)){
+					if (!this[c2.y][c2.x].shortCut(c2, c1)){
+						this.disconnect(c1, c2);
+						return false;
 					}
 				}
 			} else {
+				//c1 and c2 are ouputs, maybe todo?!
 				return false;
 			}
 
@@ -113,9 +107,9 @@ var Logikus = {
 		};
 
 		this.wizardry.doWizardry = function () {
-			var lightBulb = null;
-			while (lightBulb = this.Logikus.lightBulb.pop()){
-				lightBulb.remove();
+			var lightBulbs = null;
+			while (lightBulbs = this.Logikus.lightBulbs.pop()){
+				lightBulbs.remove();
 			}
 
 			for (var i = 0; i < 11; i++){
@@ -131,22 +125,30 @@ var Logikus = {
 		this.wizardry.magic = function (y,x) {
 			if (!this[y][x].powered){
 				this[y][x].powered = true;
-				if (y > 0 || y == 0 && x == 0){
-					var bridge = false;
-					if (y == 0){
+				var bridge = false;
+
+				if (y == 0){
+					if (x == 0){
 						bridge = true;
-					} else {
-						if (y % 2 == this.Logikus.levers[x]){
-							bridge = true;
+					}
+				} else if (y > 0){
+					if (y % 2 == this.Logikus.levers[x]){
+						bridge = true;
+					}
+				}
+				if (bridge){
+					for (var i = -1; i < 2; i++){
+						var coords = this[y][x].out[i];
+						if (coords != null){
+							this.magic(coords.y, coords.x);
 						}
 					}
-
-					if (bridge){
-						for (var i = -1; i < 2; i++){
-							var coords = this[y][x].out[i];
-							if (coords != null){
-								this.magic(coords.y, coords.x);
-							}
+				}
+				if (y > 0){
+					for (var i = -1; i < 2; i++){
+						var coords = this[y][x].short[i];
+						if (coords != null){
+							this.magic(coords.y, coords.x);
 						}
 					}
 				}
@@ -154,19 +156,58 @@ var Logikus = {
 		}
 	},
 
-	drawLamps : function () {
-		this.lamps = [0,0,0,0,0,0,0,0,0,0];
-		this.lightBulb = [];
-		for (var x = 1; x < 11; x++){
-			this.addLamp(x);
+	setupEventListeners : function () {
+
+		var check = function check(e) {
+			if (e.keyCode == 46){
+				//remove  button clicked
+				if (selectedLine != null){
+					Logikus.disconnect(selectedLine);
+				}
+			}
 		}
 
+		window.addEventListener('keydown',check,false);
+
+		var that = this;
+		this.canvas.on('mouse:down', function(options){that.mouseDownHandler(options)});
+
+	},
+
+	mouseDownHandler : function (options){
+		if (options.target != undefined) {
+			if (options.target.type == 'rect') {
+				if (options.target.hasOwnProperty('matrix')) {
+					//we're on the patchbay
+					if (this.selectedRect === null) {
+						this.selectRect(options.target);
+					} else {
+						temp = this.selectedRect;
+						this.unselectRect();
+						this.connect(temp, options.target);
+					}
+				} else if (options.target.hasOwnProperty('pos')) {
+					//lever?
+					this.switchLever(options.target);
+				}
+			}
+		}
+
+		if (options.target == undefined || options.target.type != 'rect'){
+			this.unselectRect();
+		}
+	},
+ 
+ 	drawLamps : function () {
+		for (var x = 1; x < 11; x++){
+			this.drawLamp(x);
+		}
 	},
 
 	drawUpperRow : function () {
 		for (var x = 0; x < 11; x++){
 			for (var j = -1; j < 2; j++){
-				this.addSmallConnector({x: x, y: 0, j: j});	
+				this.drawSmallConnector({x: x, y: 0, j: j});	
 			}
 		}
 	},
@@ -176,7 +217,7 @@ var Logikus = {
 			for (var x = 1; x < 11 ; x++){
 				for (var i = -1; i < 2; i++){
 					for (var j = -1; j < 3; j += 2){
-						this.addConnector({y: y, x: x, i: i, j: j});
+						this.drawConnector({y: y, x: x, i: i, j: j});
 					}
 				}
 			}
@@ -184,77 +225,14 @@ var Logikus = {
 	},
 
 	drawControls : function () {
-		this.levers = [0,0,0,0,0,0,0,0,0,0,0];
 		var top = this.canvas.height - 80;
 		for (var x = 1; x < 11; x++){
 			this.addLever(x);
-		}
-		//todo addButton
-	},
-
-	mouseDownHandler : function (options){
-		if (options.target != undefined) {
-			if (options.target.type == 'rect') {
-				if (options.target.hasOwnProperty('matrix')){
-					//we're on the patchbay
-					if (this.selected === null){
-						this.select(options.target);
-					} else if (options.target.type == 'line') {
-						//check if we hit a rect underneath the line
-						//disconnect(line);
-					} else {
-						temp = this.selected;
-						this.unselect();
-						this.connect(temp, options.target);
-					}
-				} else if (options.target.hasOwnProperty('special')){
-					if (options.target.special == 'Q'){
-
-					} else {
-
-					}
-				} else if (options.target.hasOwnProperty('pos')){
-					//lever?
-					this.switchLever(options.target);
-				}
-
-			} else {
-				if (this.selected != null){
-					this.unselect();
-				}
-			}
-		} else {
-			if (this.selected != null){
-				this.unselect();
-			}
+			//todo this.addButton(x);
 		}
 	},
 
-	select : function (target) {
-		this.selected = target.matrix;
-		target.remove();
-	},
-
-	connect : function (temp, target) {
-		//todo divide drawing from logic, but whatevs
-		if (this.wizardry.connect(temp,target.matrix)){
-			this.addConnection(temp,target.matrix);
-			this.wizardry.doWizardry();
-		}
-	},
-
-	disconnect : function (line){
-		line.remove();
-		this.wizardry.disconnect(line.connects[0], line.connects[1]);
-		this.wizardry.doWizardry();
-	},
-
-	unselect : function (target) {
-		this.addConnector(this.selected);
-		this.selected = null;
-	},
-
-	addConnection : function (c1,c2){
+	drawConnection : function (c1,c2){
 		var selectedRealCoords = this.getConnectorCoords(c1);
 		var targetRealCoords = this.getConnectorCoords(c2);
 		var color = [255,Math.floor(Math.random() * 100), Math.floor(Math.random() * 100)]
@@ -309,9 +287,35 @@ var Logikus = {
 		return {top: top, left: left};
 	},
 
-	addConnector : function (coords) {
+	selectRect : function (target) {
+		this.selectedRect = target.matrix;
+		target.remove();
+	},
 
-		realCoords = this.getConnectorCoords(coords);
+	connect : function (temp, target) {
+		//todo divide drawing from logic, but whatevs
+		if (this.wizardry.connect(temp,target.matrix)){
+			this.drawConnection(temp,target.matrix);
+			this.wizardry.doWizardry();
+		}
+	},
+
+	disconnect : function (line){
+		line.remove();
+		this.wizardry.disconnect(line.connects[0], line.connects[1]);
+		this.wizardry.doWizardry();
+	},
+
+	unselectRect : function () {
+		if (this.selectedRect != null){
+			this.drawConnector(this.selectedRect);
+			this.selectedRect = null;
+		}
+	},
+
+	drawConnector : function (coords) {
+
+		var realCoords = this.getConnectorCoords(coords);
 
 		var rect = new fabric.Rect({
 			left: realCoords.left,
@@ -332,7 +336,7 @@ var Logikus = {
 		this.canvas.add(rect);
 	},
 
-	addSmallConnector : function (coords) {
+	drawSmallConnector : function (coords) {
 
 		realCoords = this.getConnectorCoords(coords);
 
@@ -357,42 +361,19 @@ var Logikus = {
 	addLever : function (x) {
 
 		var width = .1 * this.colWidth;
-
-		var rect = new fabric.Rect({
-			left: (x + .55) * this.colWidth - .5 * width,
-			top: this.canvas.height - this.rowHeight,
-			fill: 'black',
-			width: width,
-			height: this.rowHeight,
-			selectable: false,
-			lockMovementX: true,
-			lockMovementY: true,
-			lockScalingX: true,
-			lockScalingY: true,
-			lockRotation: true,
-			x: x,
-		});
+		var left = (x + .55) * this.colWidth - .5 * width;
+		var top = this.canvas.height - this.rowHeight;
+		var rect = this.makeRect({left: left, top: top, width: width, height: this.rowHeight});
 		this.canvas.add(rect);
 
+		left = (x + .45) * this.colWidth - .5 * width;
+		top = this.canvas.height - this.rowHeight + .7 * this.rowHeight;
 		width = .3 * this.colWidth;
-		rect = new fabric.Rect({
-			left: (x + .55) * this.colWidth - .5 * width,
-			top: this.canvas.height - this.rowHeight + .7 * this.rowHeight,
-			fill: 'black',
-			width: width,
-			height: .3 * this.rowHeight,
-			selectable: true,
-			lockMovementX: true,
-			lockMovementY: true,
-			lockScalingX: true,
-			lockScalingY: true,
-			lockRotation: true,
-			hasControls: false,
-			x: x,
-			pos: 'down'
-		});
-		var that = this;
-		this.canvas.add(rect);
+		var rect2 = this.makeRect({left: left, top: top, width: width, height: .3 * this.rowHeight});
+
+		rect2.x = x;
+		rect2.pos = 'down';
+		this.canvas.add(rect2);
 
 	},
 
@@ -421,32 +402,20 @@ var Logikus = {
 
 	},
 
-	addLamp : function (x) {
+	drawLamp : function (x) {
 		var top = 1;
 		var size = this.colWidth - 20;
 		var left = x * this.colWidth + 15;
 
-		var rect = new fabric.Rect({
-			left: left,
-			top: top,
-			fill: 'white',
-			stroke: 'black',
-			width: size,
-			height: size,
-			selectable: false,
-			lockMovementX: true,
-			lockMovementY: true,
-			lockScalingX: true,
-			lockScalingY: true,
-			lockRotation: true,
-		});
+		var rect = this.makeRect({left: left, top: top, fill: 'white', width: size, height: size});
+
 		this.canvas.add(rect);
 
 	},
 
 	Lights : function (x){
 		var d = this.colWidth - 22;
-		this.lightBulb.push( new fabric.Circle({
+		this.lightBulbs.push( new fabric.Circle({
 			radius : d * .5,
 			fill: 'yellow',
 			top: 2,
@@ -461,7 +430,7 @@ var Logikus = {
 
 		}));
 
-		this.canvas.add(this.lightBulb[this.lightBulb.length -1]);
+		this.canvas.add(this.lightBulbs[this.lightBulbs.length -1]);
 
 	},
 
@@ -471,19 +440,32 @@ var Logikus = {
 				this.Lights(i);
 			}
 		}
+	},
+
+	makeRect : function (data) {
+		var rect = new fabric.Rect({
+			left: data.left,
+			top: data.top,
+			width: data.width,
+			height: data.height,
+			fill: data.fill || "black",
+			stroke: data.stroke || "black",
+			selectable: data.selectable || false,
+			hasControls: false,
+		});
+
+		return rect;
 	}
 }
-
-
-Logikus.setup();
 
 function Node(){
 	this.powered = false;
 	this.in = {"-1": null, "0": null, "1": null};
 	this.out = {"-1": null, "0": null, "1": null};
+	this.short = {"-1": null, "0": null, "1": null};
 
 	this.connectIn = function (c1,c2) {
-		if (this.in[c1.i] == null){
+		if (this.in[c1.i] == null && this.short[c1.i] == null){
 			this.in[c1.i] = c2;
 			return true
 		} else {
@@ -500,9 +482,19 @@ function Node(){
 		}
 	};
 
+	this.shortCut = function (c1,c2) {
+		if (this.in[c1.i] == null && this.short[c1.i] == null){
+			this.short[c1.i] = c2;
+			return true
+		} else {
+			return false;
+		}
+	}
+
 	this.remove = function (c1){
 		if (c1.j < 0){
 			this.in[c1.i] = null;
+			this.short[c1.i] = null;
 		} else {
 			this.out[c1.i] = null;
 		}
@@ -549,3 +541,5 @@ function LightNode(){
 
 
 }
+
+Logikus.setup();
