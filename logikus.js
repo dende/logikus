@@ -14,6 +14,7 @@ var Logikus = {
 	workingOn: null,
 	done: null,
 	lightBulbs: null,
+	highlights: null,
 
 	setup : function () {
 		this.setupCanvas();
@@ -34,6 +35,7 @@ var Logikus = {
 		this.levers = [0,0,0,0,0,0,0,0,0,0,0];
 		this.lamps = [0,0,0,0,0,0,0,0,0,0];
 		this.lightBulbs = [];
+		this.highlights = [];
 		this.wizardry = {Logikus: Logikus};
 		for (var i = 0; i < 11; i++){
 			this.wizardry[i] = {}
@@ -68,15 +70,20 @@ var Logikus = {
 					}	
 				} 
 			} else if (this.isInput(c1) && this.isInput(c2)){
-				if (this[c1.y][c1.x].shortCut(c1, c2)){
-					if (!this[c2.y][c2.x].shortCut(c2, c1)){
+				if (this[c1.y][c1.x].shortCutIn(c1, c2)){
+					if (!this[c2.y][c2.x].shortCutIn(c2, c1)){
 						this.disconnect(c1, c2);
 						return false;
 					}
 				}
 			} else {
 				//c1 and c2 are ouputs, maybe todo?!
-				return false;
+				if (this[c1.y][c1.x].shortCutOut(c1,c2)){
+					if (!this[c2.y][c2.x].shortCutOut(c2,c1)){
+						this.disconnect(c1, c2);
+						return false;
+					}
+				}
 			}
 
 			return true;
@@ -107,14 +114,25 @@ var Logikus = {
 		};
 
 		this.wizardry.doWizardry = function () {
-			var lightBulbs = null;
-			while (lightBulbs = this.Logikus.lightBulbs.pop()){
-				lightBulbs.remove();
+			var lightBulb = null;
+			while (lightBulb = this.Logikus.lightBulbs.pop()){
+				lightBulb.remove();
+			}
+
+			var highlight = null;
+			while (highlight = this.Logikus.highlights.pop()){
+				highlight.remove();
 			}
 
 			for (var i = 0; i < 11; i++){
-				for (j = (i == 0)?0:1; j < 11; j++){
-					this[i][j].powered = false;
+				if (i == 0){
+					for (j = 0; j < 11; j++){
+						this[i][j].powered = false;
+					}
+				} else {
+					for (j = 1; j < 11; j++){
+						this[i][j].powered.left = this[i][j].powered.right = false;
+					}
 				}
 			}
 
@@ -122,37 +140,78 @@ var Logikus = {
 			this.Logikus.letThereBeLight();
 		};
 
-		this.wizardry.magic = function (y,x) {
-			if (!this[y][x].powered){
-				this[y][x].powered = true;
-				var bridge = false;
-
+		this.wizardry.magic = function (y,x,dir) {
+			console.log(y,x,dir);
+			if (dir == "left"){
 				if (y == 0){
-					if (x == 0){
-						bridge = true;
-					}
-				} else if (y > 0){
-					if (y % 2 == this.Logikus.levers[x]){
-						bridge = true;
+					if (!this[y][x].powered){
+						this[y][x].powered = true;
+						this[y][x].powerOn(y,x);
+						return;
 					}
 				}
-				if (bridge){
+				if (!this[y][x].powered.left){
+					this[y][x].powered.left = true;
+					this[y][x].powerOn(y,x,dir);
+					if (y % 2 == this.Logikus.levers[x]){
+						this.magic(y,x,"right");
+					}
+
+
+					for (var i = -1; i < 2; i++){
+						var coords = this[y][x].in[i];
+						if (coords != null){
+							this.magic(coords.y, coords.x, "right");
+						}
+						coords = this[y][x].shortIn[i];
+						if (coords != null){
+							this.magic(coords.y, coords.x, "left");
+						}
+					}
+
+				}
+			} else if (dir == "right"){
+				if (y == 0){return;}
+				if (!this[y][x].powered.right){
+					this[y][x].powered.right = true;
+					this[y][x].powerOn(y,x,dir);
+
+					if (y % 2 == this.Logikus.levers[x]){
+						this.magic(y,x,"left");
+					}
+
+
 					for (var i = -1; i < 2; i++){
 						var coords = this[y][x].out[i];
 						if (coords != null){
-							this.magic(coords.y, coords.x);
+							this.magic(coords.y, coords.x, "left");
 						}
-					}
-				}
-				if (y > 0){
-					for (var i = -1; i < 2; i++){
-						var coords = this[y][x].short[i];
+						coords = this[y][x].shortOut[i];
 						if (coords != null){
-							this.magic(coords.y, coords.x);
+							this.magic(coords.y, coords.x, "right");
 						}
 					}
 				}
+
+
+			} else {
+				if (y == 0){
+					if (x == 0){
+						this[y][x].powerOn();
+						for (var j = -1; j < 2; j++){
+							var coords = this[y][x].out[j];
+							if (coords != null){
+								this.magic(coords.y, coords.x, "left");
+							}
+							coords = this[y][x].shortOut[j];
+							if (coords != null){
+								this.magic(coords.y, coords.x, "right");
+							}
+						}
+					}
+				} 
 			}
+
 		}
 	},
 
@@ -459,16 +518,17 @@ var Logikus = {
 }
 
 function Node(){
-	this.powered = false;
+	this.powered = {left: false, right: false};
 	this.in = {"-1": null, "0": null, "1": null};
 	this.out = {"-1": null, "0": null, "1": null};
-	this.short = {"-1": null, "0": null, "1": null};
+	this.shortIn = {"-1": null, "0": null, "1": null};
+	this.shortOut = {"-1": null, "0": null, "1": null};
 
 	this.connectIn = function (c1,c2) {
-		if (this.in[c1.i] == null && this.short[c1.i] == null){
+		if (this.in[c1.i] == null && this.shortIn[c1.i] == null){
 			this.in[c1.i] = c2;
 			return true
-		} else {
+		} else {lo
 			return false;
 		}
 	};
@@ -482,33 +542,74 @@ function Node(){
 		}
 	};
 
-	this.shortCut = function (c1,c2) {
-		if (this.in[c1.i] == null && this.short[c1.i] == null){
-			this.short[c1.i] = c2;
-			return true
+	this.shortCutIn = function (c1,c2) {
+		if (this.in[c1.i] == null && this.shortIn[c1.i] == null){
+			this.shortIn[c1.i] = c2;
+			return true;
 		} else {
 			return false;
 		}
-	}
+	};
+
+	this.shortCutOut = function (c1,c2) {
+		if (this.out[c1.i] == null && this.shortOut[c1.i] == null){
+			this.shortOut[c1.i] = c2;
+			return true;
+		} else {
+			return false;
+		}
+	};
 
 	this.remove = function (c1){
 		if (c1.j < 0){
 			this.in[c1.i] = null;
-			this.short[c1.i] = null;
+			this.shortIn[c1.i] = null;
 		} else {
 			this.out[c1.i] = null;
+			this.shortOut[c1.i] = null;
 		}
 	};
+
+	this.powerOn = function(y,x,dir){
+		realCoords = Logikus.getConnectorCoords({x:x,y:y,i:-1,j:dir=="left"?-1:1});
+		var highlight = new fabric.Rect({
+			left: realCoords.left - Logikus.connectorSize,
+			top: realCoords.top - Logikus.connectorSize,
+			fill: 'yellow',
+			width: Logikus.connectorSize * 3,
+			height: Logikus.connectorSize * 6,
+			selectable: false,
+			lockMovementX: true,
+			lockMovementY: true,
+			lockScalingX: true,
+			lockScalingY: true,
+			lockRotation: true,
+			hasControls: false,
+		});
+
+		Logikus.highlights.push(highlight);
+		Logikus.canvas.add(highlight);
+		Logikus.canvas.sendToBack(highlight);
+	}
 }
 
 function SourceNode(){
 	this.powered = false;
 	this.out = {"-1": null, "0": null, "1": null};
-
+	this.shortOut = {"-1": null, "0": null, "1": null};
 
 	this.connectOut = function (c1,c2) {
-		if (this.out[c1.j] == null){
+		if (this.out[c1.j] == null && this.shortOut[c1.j] == null){
 			this.out[c1.j] = c2;
+			return true;
+		} else {
+			return false;
+		}
+	};
+
+	this.shortCutOut = function (c1,c2) {
+		if (this.shortOut[c1.j] == null && this.out[c1.j] == null){
+			this.shortOut[c1.j] = c2;
 			return true;
 		} else {
 			return false;
@@ -517,18 +618,55 @@ function SourceNode(){
 
 	this.remove = function (c1){
 		this.out[c1.j] = null;
+		this.shortOut[c1.j] = null;
 	};
 
+	this.bridgeOn = function(){};
+
+	this.powerOn = function(){
+
+		realCoords = Logikus.getConnectorCoords({x:0,y:0,j:-1});
+
+		var highlight = new fabric.Rect({
+			left: realCoords.left - Logikus.connectorSize,
+			top: realCoords.top - Logikus.connectorSize,
+			fill: 'yellow',
+			width: Logikus.connectorSize * 6,
+			height: Logikus.connectorSize * 3,
+			selectable: false,
+			lockMovementX: true,
+			lockMovementY: true,
+			lockScalingX: true,
+			lockScalingY: true,
+			lockRotation: true,
+			hasControls: false,
+		});
+
+		Logikus.highlights.push(highlight);
+		Logikus.canvas.add(highlight);
+		Logikus.canvas.sendToBack(highlight);
+	};
+	
 }
 
 function LightNode(){
 	this.powered = false;
 	this.in = {"-1": null, "0": null, "1": null};
+	this.shortIn = {"-1": null, "0": null, "1": null};
 
 
 	this.connectIn = function (c1,c2) {
-		if (this.in[c1.j] == null){
+		if (this.in[c1.j] == null && this.shortIn[c1.j] == null){
 			this.in[c1.j] = c2;
+			return true
+		} else {
+			return false;
+		}
+	};
+
+	this.shortCutIn = function (c1,c2) {
+		if (this.shortIn[c1.j] == null && this.in[c1.j] == null){
+			this.shortIn[c1.j] = c2;
 			return true
 		} else {
 			return false;
@@ -537,9 +675,32 @@ function LightNode(){
 
 	this.remove = function (c1){
 		this.in[c1.j] = null;
+		this.shortIn[c1.j] = null;
 	};
 
+	this.powerOn = function(y,x){
 
+		realCoords = Logikus.getConnectorCoords({x:x,y:y,j:-1});
+		console.log(x,y,realCoords)
+		var highlight = new fabric.Rect({
+			left: realCoords.left - Logikus.connectorSize,
+			top: realCoords.top - Logikus.connectorSize,
+			fill: 'yellow',
+			width: Logikus.connectorSize * 6,
+			height: Logikus.connectorSize * 3,
+			selectable: false,
+			lockMovementX: true,
+			lockMovementY: true,
+			lockScalingX: true,
+			lockScalingY: true,
+			lockRotation: true,
+			hasControls: false,
+		});
+
+		Logikus.highlights.push(highlight);
+		Logikus.canvas.add(highlight);
+		Logikus.canvas.sendToBack(highlight);
+	};
 }
 
 Logikus.setup();
