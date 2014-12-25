@@ -76,7 +76,6 @@ var Logikus = {
 					}
 				}
 			} else {
-				//c1 and c2 are ouputs, maybe todo?!
 				if (this[c1.y][c1.x].shortCutOut(c1,c2)){
 					if (!this[c2.y][c2.x].shortCutOut(c2,c1)){
 						this.disconnect(c1, c2);
@@ -454,8 +453,6 @@ var Logikus = {
 			this.levers[lever.x] = 1;
 		}
 
-		console.log("moved lever " + lever.x + " " + lever.pos)
-
 		lever.animate('top', newPos, {
 			duration: 500,
 			onChange: this.canvas.renderAll.bind(this.canvas),
@@ -538,7 +535,7 @@ var Logikus = {
 
 	getCoordsFromIdentifier : function (identifier){
 		var rows = {X: 0, A: 1, B: 2, C: 3, D: 4, E: 5, F: 6, G: 7, H: 8, I: 9, J: 10};
-		var cols = {"X": 0, "0": 1, "1": 2, "2": 3, "3": 4, "4": 5, "5": 6, "6": 7, "8": 9, "9": 10};
+		var cols = {"X": 0, "0": 1, "1": 2, "2": 3, "3": 4, "4": 5, "5": 6, "6": 7, "7": 8, "8": 9, "9": 10};
 		var inout = {a: -1, b: 1};
 		var vpos = {o: -1, m: 0, u: 1};
 		var hpos = {l: -1, m: 0, r: 1};
@@ -623,7 +620,7 @@ var Logikus = {
 
 	loadState : function(state){
 		var rows = {X: 0, A: 1, B: 2, C: 3, D: 4, E: 5, F: 6, G: 7, H: 8, I: 9, J: 10};
-		var cols = {X: 0, 0: 1, 1: 2, 2: 3, 4: 5, 5: 6, 6: 7, 8: 9, 9: 10};
+		var cols = {X: 0, 0: 1, 1: 2, 2: 3, 3: 5, 4: 5, 5: 6, 6: 7, 7: 8, 8: 9, 9: 10};
 		var inout = {a: -1, b: 1};
 		var vpos = {o: -1, m: 0, u: 1};
 		var hpos = {l: -1, m: 0, r: 1};
