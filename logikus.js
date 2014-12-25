@@ -15,7 +15,6 @@ var Logikus = {
 	done: null,
 	lightBulbs: null,
 	highlights: null,
-
 	setup : function () {
 		this.setupCanvas();
 		this.setupWizardry();
@@ -141,7 +140,6 @@ var Logikus = {
 		};
 
 		this.wizardry.magic = function (y,x,dir) {
-			console.log(y,x,dir);
 			if (dir == "left"){
 				if (y == 0){
 					if (!this[y][x].powered){
@@ -222,6 +220,13 @@ var Logikus = {
 				//remove  button clicked
 				if (selectedLine != null){
 					Logikus.disconnect(selectedLine);
+				}
+			} else if (e.keyCode == 83){
+				Logikus.saveState();
+			} else if (e.keyCode == 76){
+				var state = window.prompt("Enter state");
+				if (state != ""){
+					Logikus.loadState(state);
 				}
 			}
 		}
@@ -514,6 +519,188 @@ var Logikus = {
 		});
 
 		return rect;
+	},
+
+	getIdentifier : function (coords){
+		var rows = ["X","A","B","C","D","E","F","G","H","I","J","K"];
+		var cols = ["X", 0, 1, 2, 3, 4, 5, 6, 7, 8, 9];
+		var inout = {"-1": "a", "1": "b"};
+		var vpos = {"-1": "o", "0": "m", "1": "u"};
+		var hpos = {"-1": "l", "0": "m", "1": "r"};
+
+		if (coords.y==0){
+			return rows[coords.y] + cols[coords.x] + hpos[coords.j];
+		} else {
+			return rows[coords.y] + cols[coords.x] + inout[coords.j] + vpos[coords.i];
+		}
+
+	},
+
+	getCoordsFromIdentifier : function (identifier){
+		var rows = {X: 0, A: 1, B: 2, C: 3, D: 4, E: 5, F: 6, G: 7, H: 8, I: 9, J: 10};
+		var cols = {"X": 0, "0": 1, "1": 2, "2": 3, "3": 4, "4": 5, "5": 6, "6": 7, "8": 9, "9": 10};
+		var inout = {a: -1, b: 1};
+		var vpos = {o: -1, m: 0, u: 1};
+		var hpos = {l: -1, m: 0, r: 1};
+
+		if (identifier[0] == "X"){
+			return {y: 0, x: cols[identifier[1]], j: hpos[identifier[2]]};
+		} else {
+			return {y: rows[identifier[0]], x: cols[identifier[1]], i: vpos[identifier[3]], j: inout[identifier[2]]}
+		}
+	},
+
+	saveState : function (){
+		console.log("saving state");
+		var temp = {};
+		temp.add = function(node, otherNode){
+			if (!this.hasOwnProperty((on = Logikus.getIdentifier(otherNode)))){
+				temp[Logikus.getIdentifier(node)] = on;
+			}
+		}
+		var node = null;
+		var otherNode = null;
+		for (var y = 0; y < 11; y++){
+			for (var x = 0; x < 11; x++){
+				node = this.wizardry[y][x];
+				if (y == 0){
+					if (x == 0){
+					for (var j = -1; j < 2; j++){
+						otherNode = null;
+						otherNode = node.out[j];
+						if (otherNode != null){
+							temp.add({y: y, x: x, j: j}, otherNode);
+						}
+						otherNode = node.shortOut[j];
+						if (otherNode != null){
+							temp.add({y: y, x: x, j: j}, otherNode);
+						}
+					}
+
+					} else {
+					for (var j = -1; j < 2; j++){
+						otherNode = null;
+						otherNode = node.in[j];
+						if (otherNode != null){
+							temp.add({y: y, x: x, j: j}, otherNode);
+						}
+						otherNode = node.shortIn[j];
+						if (otherNode != null){
+							temp.add({y: y, x: x, j: j}, otherNode);
+						}
+					}
+					}
+				} else {
+					if (x>0){
+						for (var i = -1; i < 2; i++){
+							for (var j = -1; j < 2; j = j+2){
+								otherNode = null;
+								if (j == -1){
+									otherNode = node.in[i];
+								} else {
+									otherNode = node.out[i];
+								}
+								if (otherNode != null){
+									temp.add({y: y, x: x, j: j, i: i}, otherNode);
+								}
+								if (j == -1){
+									otherNode = node.shortIn[i];
+								} else {
+
+									otherNode = node.shortOut[i];
+								}
+								if (otherNode != null){
+									temp.add({y: y, x: x, j: j, i: i}, otherNode);
+								}
+							}
+						}
+					}
+				}
+			}
+		}
+		console.log(JSON.stringify(temp));
+	},
+
+	loadState : function(state){
+		var rows = {X: 0, A: 1, B: 2, C: 3, D: 4, E: 5, F: 6, G: 7, H: 8, I: 9, J: 10};
+		var cols = {X: 0, 0: 1, 1: 2, 2: 3, 4: 5, 5: 6, 6: 7, 8: 9, 9: 10};
+		var inout = {a: -1, b: 1};
+		var vpos = {o: -1, m: 0, u: 1};
+		var hpos = {l: -1, m: 0, r: 1};
+
+		Logikus.setupWizardry();
+		nodes = JSON.parse(state);
+
+		for (var node in nodes){
+			if (nodes.hasOwnProperty(node)){
+				otherNode = nodes[node];
+
+
+				c1 = this.getCoordsFromIdentifier(node);
+				c2 = this.getCoordsFromIdentifier(otherNode);
+
+				Logikus.wizardry.connect(c1,c2);
+				Logikus.drawConnection(c1,c2);
+				Logikus.wizardry.doWizardry();
+
+
+				/*
+				if (c1.y == 0){
+					if (c1.x == 0){
+						n1 = SourceNode();
+						if (c2.y == 0){
+							//LightNode
+							n2 = LightNode();
+							n1.connectOut(c2);
+							n2.connectIn(c1);
+						} else {
+							n2 = Node();
+							if (c2.j == -1){
+								n1.connectOut(c2);
+								n2.connectIn(c1);
+							} else {
+								n1.shortCutOut(c2);
+								n2.shortCutOut(c1);
+							}
+						}
+					} else {
+						n1 = LightNode();
+						n2 = Node();
+						if (c2.j == -1){
+							n1.shortCutIn(c2);
+							n2.shortCutIn(c1);
+						} else {
+							n1.connectIn(c2);
+							n2.connectOut(c1);
+						}
+					}
+				} else {
+					n1 = Node();
+					n2 = Node();
+					if (c1.j == -1){
+						if (c2.j == -1){
+							n1.shortCutIn(c2);
+							n2.shortCutIn(c1);
+						} else {
+							n1.connectIn(c2);
+							n2.connectOut(c1);
+						}
+					} else {
+						if (c2.j == -1){
+							n1.connectOut(c2);
+							n2.connectIn(c1);
+						} else {
+							n1.shortCutOut(c2);
+							n2.shortCutOut(c1);
+						}
+					}
+				}
+			}
+			Logikus.wizardry[c1.y][c1.x] = n1;
+			Logikus.wizardry[c2.y][c2.x] = n2;
+			*/
+			}
+		}
 	}
 }
 
@@ -646,7 +833,7 @@ function SourceNode(){
 		Logikus.canvas.add(highlight);
 		Logikus.canvas.sendToBack(highlight);
 	};
-	
+
 }
 
 function LightNode(){
@@ -681,7 +868,6 @@ function LightNode(){
 	this.powerOn = function(y,x){
 
 		realCoords = Logikus.getConnectorCoords({x:x,y:y,j:-1});
-		console.log(x,y,realCoords)
 		var highlight = new fabric.Rect({
 			left: realCoords.left - Logikus.connectorSize,
 			top: realCoords.top - Logikus.connectorSize,
